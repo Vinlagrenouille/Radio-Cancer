@@ -1,589 +1,125 @@
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.BindException;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousServerSocketChannel;
-import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.CompletionHandler;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import javax.net.*;
+import javax.swing.*;
+import javax.swing.event.*;
+import java.awt.*;
+import java.awt.event.*;
+import javax.swing.text.*;
+import javax.sound.sampled.*;
+import java.util.jar.*;
+import javax.net.ssl.*;
 
 public class RadioServer {
-	
-	ArrayList<Radio> radiosList = new ArrayList<>();
-	
-	public static void main(String[] args) throws Exception {
-		// Creation of the server socket channel
-		AsynchronousServerSocketChannel server = AsynchronousServerSocketChannel.open();
-		String host = "localhost";
-		int port = 8989;
-		// Defining the host and the port of the server
-		InetSocketAddress sAddr = new InetSocketAddress(host, port);
-		try {
-			server.bind(sAddr);
-		} catch (BindException e) {
-			System.out.println("Port already used.");
-			System.exit(0);
-		}
-		System.out.println("Server is listening at " + sAddr);
+	private ArrayList<String> globalListSong = new ArrayList<String>();
+	private ArrayList<Radio> listRadio = new ArrayList<>();
+	private ArrayList<PrintWriter> userList;
 
-		// We create a list of client connections
-		ClientConnectionInformation.connectedClients = new ArrayList<>();
-
-		// We create the actual connection
-		ClientConnectionInformation clientCoInfo = new ClientConnectionInformation();
-		clientCoInfo.server = server;
-
-		// Accepting a connection with the Connection Handler !
-		server.accept(clientCoInfo, new ConnectionHandler());
-		Thread.currentThread().join();
-	}
-}
-
-// CLient connection informations !!
-class ClientConnectionInformation {
-	// The connected clients to the server
-	static List<ClientConnectionInformation> connectedClients = new ArrayList<>();
-
-	// The list of messages not received yet
-	// Map of <LOGIN, LIST_OF_MESSAGES_TO_THIS_LOGIN> and each message is
-	// structured like this : sender-message
-	//static Map<String, List<String>> messages = new HashMap<>();
-
-	// The server
-	AsynchronousServerSocketChannel server;
-
-	// The socket of the client
-	AsynchronousSocketChannel client;
-
-	// The buffer
-	ByteBuffer buffer;
-
-	// The client address
-	SocketAddress clientAddr;
-
-	// To know if the server is waiting for reading the client (isRead=true) or
-	// for writing to the client (isRread=false)
-	boolean isRead;
-
-	// login of this client
-	String login;
-
-	// the login of the receiver of the message sent by this client
-	String dest;
-}
-
-// COnnection handler used when a client is connecting to the server
-class ConnectionHandler implements CompletionHandler<AsynchronousSocketChannel, ClientConnectionInformation> {
-
-	// If the connection has succeeded, we enter in the completed method!
-	@Override
-	public void completed(AsynchronousSocketChannel client, ClientConnectionInformation attach) {
-		try {
-			// We accepted this connection
-			SocketAddress clientAddr = client.getRemoteAddress();
-			System.out.println("Accepted a connection from " + clientAddr);
-
-			// We keep listening to another client to connect
-			attach.server.accept(attach, this);
-
-			// Creation of the completion handler for read write operations
-			ReadWriteHandler rwHandler = new ReadWriteHandler();
-
-			// Saving the client informations
-			ClientConnectionInformation newAttach = new ClientConnectionInformation();
-			newAttach.server = attach.server;
-			newAttach.client = client;
-			newAttach.buffer = ByteBuffer.allocate(2048);
-			newAttach.isRead = false;
-			newAttach.clientAddr = clientAddr;
-
-			// Adding the new client to the list of connected clients
-			ClientConnectionInformation.connectedClients.add(newAttach);
-
-			// We print the connected clients
-			for (ClientConnectionInformation a : ClientConnectionInformation.connectedClients) {
-				System.out.println("connected : " + a.clientAddr);
-			}
-
-			Charset cs = Charset.forName("UTF-8");
-			String msg = ":" + newAttach.server.getLocalAddress() + " CNX";
-			byte[] data = msg.getBytes(cs);
-			newAttach.buffer.put(data);
-			newAttach.buffer.flip();
-
-			// We write to the client the command CNX to ask him if he already
-			// has an account, and the dialog begins
-			client.write(newAttach.buffer, newAttach, rwHandler);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-
-	// If not we enter in the failed method
-	@Override
-	public void failed(Throwable e, ClientConnectionInformation attach) {
-		System.out.println("Failed to accept a  connection.");
-		e.printStackTrace();
-	}
-}
-
-// Completion handler for the read or write operations
-class ReadWriteHandler implements CompletionHandler<Integer, ClientConnectionInformation> {
-
-	// If the read/write operation was a succeed, we enter in the completed
-	// method
-	@Override
-	public void completed(Integer result, ClientConnectionInformation attach) {
-		// If the result=-1, the client has disconnect, so we disconnect it and
-		// stop listening to it
-		if (result == -1) {
+	private class ClientHandler implements Runnable {
+		BufferedReader reader;
+		SSLSocket sock;
+		public ClientHandler(SSLSocket clientSocket, PrintWriter writer) {
 			try {
-				attach.client.close();
-				System.out.println("Stopped listening to the client " + attach.clientAddr);
-
-				// we remove this client of the list of the connected clients
-				ClientConnectionInformation.connectedClients.remove(attach);
-			} catch (IOException ex) {
-				ex.printStackTrace();
+				userList = new ArrayList<PrintWriter>();
+				userList.add(writer);
+				sock = clientSocket;
+				InputStreamReader isReader = new InputStreamReader(sock.getInputStream());
+				reader = new BufferedReader(isReader);
 			}
-			return;
+			catch(Exception e) {e.printStackTrace();}
+
 		}
-
-		if (attach.isRead) {
-			// Read succeeded
-			// Getting the message we just read
-			attach.buffer.flip();
-			int limits = attach.buffer.limit();
-			byte bytes[] = new byte[limits];
-			attach.buffer.get(bytes, 0, limits);
-			Charset cs = Charset.forName("UTF-8");
-			String msg = new String(bytes, cs);
-			msg = msg.split("\r")[0];
-
-			// treatment of the message
-			treatmentForMessage(msg, attach);
-
-			attach.isRead = false; // Now we will write to the client
-			attach.buffer.rewind();
-
-			attach.client.write(attach.buffer, attach, this);
-		} else {
-			// Write succeeded
-			attach.isRead = true; // Now we will read from the client
-			attach.buffer.clear();
-			attach.client.read(attach.buffer, attach, this);
-		}
-	}
-
-	// Treatment of a message
-	private void treatmentForMessage(String msg, ClientConnectionInformation clientCoInfo) {
-		// Syso to know what the client sends
-		// System.out.println("Client at " + clientCoInfo.clientAddr + " says :
-		// " + msg);
-
-		// We separate the different elements of the message : the prefix, the
-		// command and the params (msg)
-		int prefixEndIndex = msg.indexOf(" ");
-		String prefix = msg.substring(1, prefixEndIndex - 1);
-		msg = msg.substring(prefixEndIndex + 1);
-		int commandEndIndex = msg.indexOf(" ");
-		String command = "";
-		if (commandEndIndex < 0) {
-			command = msg;
-			msg = "";
-		} else {
-			command = msg.substring(0, commandEndIndex);
-			msg = msg.substring(commandEndIndex + 1);
-		}
-
-		Charset cs = Charset.forName("UTF-8");
-		SocketAddress address = null;
-		try {
-			address = clientCoInfo.server.getLocalAddress();
-		} catch (IOException e2) {
-			e2.printStackTrace();
-		}
-
-		clientCoInfo.buffer.clear();
-		String response = "";
-
-		// Now we switch on the different possible commands
-		switch (command) {
-		case "CNX":
-			if (msg.equalsIgnoreCase("y")) {
-				// Connection to as existing account
-				response = ":" + address + " NICK";
-			} else {
-				// Creating a new account
-				response = ":" + address + " NEW";
-			}
-			break;
-		case "NICK":
-			// Login
-			clientCoInfo.login = msg;
-			if (loginExists(clientCoInfo.login) && !alreadyConnected(clientCoInfo.login)) {
-				response = ":" + address + " PASS";
-			} else if (alreadyConnected(clientCoInfo.login)) {
-				System.out.println("login already connected");
-				response = ":" + address + " ERR_NICKCOLLISION";
-			} else {
-				System.out.println("error nick");
-				response = ":" + address + " NICK e";
-			}
-			break;
-		case "ERR_NICKCOLLISION": // A second user try to connect with a login
-			// already connected -- disconnect both
-			for (ClientConnectionInformation c : ClientConnectionInformation.connectedClients) {
-				if (c.login.equals(clientCoInfo.login)) {
-					response = ":" + address + " QUIT" + " collision";
-				}
-			}
-			break;
-		case "ERR_NONICKNAMEGIVEN": // login is empty
-			System.out.println("LOGIN EMPTY");
-			if (msg.contains("newErr"))
-				response = ":" + address + " NEW";
-			else
-				response = ":" + address + " NICK";
-			break;
-		case "PASS":
-			// Enter the password of the existing account
-			if (loginAssociatedToPassword(clientCoInfo.login, msg)) {
-				System.out.println(clientCoInfo.login + " just signed in.");
-				response = ":" + address + " MENU";
-
-				// If the user does not exist in the map of message not received
-				// yet
-				if (!ClientConnectionInformation.messages.containsKey(clientCoInfo.login)) {
-					// We inser it
-					ClientConnectionInformation.messages.put(clientCoInfo.login, new ArrayList<String>());
-				}
-				// We check if the user has message not received yet, if yes we
-				// tell the client with "new"
-				if (!ClientConnectionInformation.messages.get(clientCoInfo.login).isEmpty()) {
-					response += " new";
-				}
-			} else {
-				System.out.println("error pass");
-				response = ":" + address + " PASS e";
-			}
-			break;
-
-		// Login of the new account
-		case "NEW":
-			if (!loginExists(msg)) {
-				clientCoInfo.login = msg;
-				response = ":" + address + " NEWPASS";
-			} else {
-				System.out.println("login already used");
-				response = ":" + address + " NEW" + " used";
-			}
-			break;
-
-		// The password, fullname and mail of the enw account
-		case "NEWPASS":
-			String[] tab = msg.split(" ");
+		public void run() {
+			String message = null;
 			try {
-				createNewAccount(clientCoInfo.login, tab[0], tab[1], tab[2]);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			System.out.println(clientCoInfo.login + " just signed up.");
-			response = ":" + address + " MENU";
-			if (!ClientConnectionInformation.messages.containsKey(clientCoInfo.login)) {
-				ClientConnectionInformation.messages.put(clientCoInfo.login, new ArrayList<String>());
-			}
-			if (!ClientConnectionInformation.messages.get(clientCoInfo.login).isEmpty()) {
-				response += " new";
-			}
-			break;
-
-		// Menu
-		case "MENU":
-			switch (msg) {
-			case "1":
-				try {
-					response = ":" + address + " CONTACTS_OPTIONS " + listOfContacts(clientCoInfo.login);
-				} catch (FileNotFoundException e) {
-					e.printStackTrace();
-				}
-				break;
-			case "2":
-				try {
-					response = ":" + address + " CHAT " + listOfContacts(clientCoInfo.login);
-				} catch (FileNotFoundException e2) {
-					e2.printStackTrace();
-				}
-				if (!ClientConnectionInformation.messages.get(clientCoInfo.login).isEmpty()) {
-					response += " new";
-					String sender = ClientConnectionInformation.messages.get(clientCoInfo.login).get(0).split(";@;")[0];
-					response += "-" + sender;
-				}
-				break;
-			case "3":
-				try {
-					response = ":" + address + " CHATN " + listOfContacts(clientCoInfo.login);
-				} catch (FileNotFoundException e2) {
-					e2.printStackTrace();
-				}
-				;
-				break;
-			case "4":
-				response = ":" + address + " OPTIONS";
-				break;
-			}
-			break;
-
-		// Options menu
-		case "OPTIONS":
-			switch (msg) {
-			case "1":
-				response = ":" + address + " CHANGE login";
-				break;
-			case "2":
-				response = ":" + address + " CHANGE pass";
-				break;
-			case "3":
-				response = ":" + address + " CHANGE fullName";
-				break;
-			case "4":
-				response = ":" + address + " CHANGE mail";
-				break;
-			case "6":
-				response = ":" + address + " MENU";
-				if (!ClientConnectionInformation.messages.get(clientCoInfo.login).isEmpty()) {
-					response += " new";
-				}
-				break;
-			}
-			break;
-
-		// Change info of the client
-		case "CHANGE":
-			String type = msg.split("-")[0];
-			String change = msg.split("-")[1];
-			if (!loginExists(change)) {
-				changeUserInfo(clientCoInfo, type, change);
-				response = ":" + address + " OPTIONS " + type;
-			} else {
-				System.out.println("login already used");
-				response = ":" + address + " ERR_NICKNAMEINUSE";
-			}
-			break;
-
-		// Proper deconnexion
-		case "QUIT":
-			if (msg.contains("delete")) {
-				deleteAccount(clientCoInfo.login);
-				response = ":" + address + " QUIT deleted";
-			} else if (msg.contains("tooMuchTentative")) {
-				response = ":" + address + " QUIT tooMuchTentative";
-			} else
-				response = ":" + address + " QUIT";
-			break;
-		default:
-			System.out.println("Command not handled");
-			break;
-		}
-		response = response + "\r\n";
-		byte[] data = response.getBytes(cs);
-		clientCoInfo.buffer.put(data);
-		clientCoInfo.buffer.flip();
-	}
-
-	// Check if a connected clients uses this login
-	private boolean alreadyConnected(String login) {
-		int score = 0;
-		for (ClientConnectionInformation a : ClientConnectionInformation.connectedClients) {
-			if (!Objects.isNull(a.login) && a.login.equals(login))
-				score++;
-		}
-		if (score > 1)
-			return true;
-		return false;
-	}
-
-	// Change a user informations in the directory file
-	private void changeUserInfo(ClientConnectionInformation attach, String type, String change) {
-		File dir = new File("directory.txt");
-		File temp = new File("temp.txt");
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(dir));
-			BufferedWriter bw = new BufferedWriter(new FileWriter(temp));
-			String line = "";
-
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("1;@;" + attach.login + ";@;")) {
-					String[] tab = line.split(";@;");
-					switch (type) {
-					case "login":
-						tab[1] = change;
-						attach.login = change;
-						break;
-					case "pass":
-						tab[2] = change;
-						break;
-					case "fullName":
-						tab[3] = change;
-						break;
-					case "mail":
-						tab[4] = change;
-						break;
-					}
-					String newLine = "1";
-					for (int i = 1; i < tab.length; i++) {
-						newLine += ";@;" + tab[i];
-					}
-					if (tab.length <= 5)
-						newLine += ";@;";
-					bw.write(newLine + "\n");
-				} else {
-					bw.write(line + "\n");
-				}
-				bw.flush();
-			}
-			bw.close();
-			br.close();
-
-			dir.delete();
-			temp.renameTo(new File("directory.txt"));
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-
-	// Delete an account (it will make it UNACTIVE)
-	private void deleteAccount(String login) {
-		File dir = new File("directory.txt");
-		File temp = new File("temp.txt");
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(dir));
-			BufferedWriter bw = new BufferedWriter(new FileWriter(temp));
-			String line = "";
-
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("1;@;" + login + ";@;")) {
-					bw.write("0" + line.substring(1) + "\n");
-				} else {
-					bw.write(line + "\n");
-				}
-				bw.flush();
-			}
-			bw.close();
-			br.close();
-
-			dir.delete();
-			temp.renameTo(new File("directory.txt"));
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-	
-	// Returns the list of active users of this server
-	private String listOfUsers(String login) {
-		File dir = new File("directory.txt");
-		String user = "";
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(dir));
-			String line = "";
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("1")) {
-					line = line.substring(4);
-					if (!line.startsWith(login + ";@;")) {
-						int index = line.indexOf(";@;");
-						String loginContact = line.substring(0, index);
-						if (!isAlreadyAContact(login, loginContact)) {
-							if (user.equals("")) {
-								user = loginContact;
-							} else {
-								user = user + "-" + loginContact;
-							}
+				while((message = reader.readLine()) != null) {
+					if (message.equals("LIST")) {
+						System.out.println("Sending...");
+						System.out.println("listSong.size() = " + listRadio.size());
+						for (Radio x : listRadio) {
+							System.out.println("Sent : " + x);
+							sendUser(x, userList);
 						}
+						System.out.println("Stopped.");
+						sendUser("STOP", userList);
+					}
+					else if (message.startsWith("CHOOSE ")) {
+						message = message.replaceFirst("CHOOSE ", "");
+
+						File file = new File(message);
+						InputStream fileStream = new FileInputStream(file);
+						System.out.println("CHOOSE : " + message);
+						long length = file.length();
+						if (length > Integer.MAX_VALUE) {
+							System.out.println("TOO LARGE - ERROR");
+						}
+						byte[] bytes = new byte[(int)length];
+						int offset = 0;
+						int numRead = 0;
+						while (offset < bytes.length && (numRead=fileStream.read(bytes, offset, bytes.length-offset)) >= 0) {
+							offset += numRead;
+						}
+						if (offset < bytes.length) {
+							throw new IOException("FAILED READING "+ file.getName());
+						}
+						fileStream.close();
+						String value = new String(bytes);
+						sendUser("STREAM", userList);
+						sendUser(value, userList);
+						sendUser("DONE", userList);
 					}
 				}
 			}
-			br.close();
-			if (user.length() == 0)
-				return "";
-		} catch (IOException e) {
-			e.printStackTrace();
+			catch (Exception e) {e.printStackTrace();}
 		}
-
-		return user;
+	}
+	public static void main(String args[]) {
+		new FileHostingServer().go();
 	}
 
-	// Check if the login and the password are correct
-	private boolean loginAssociatedToPassword(String login2, String pass2) {
+	private void go() {
 		try {
-			File dir = new File("directory.txt");
-			BufferedReader br = new BufferedReader(new FileReader(dir));
-			String line = "";
-
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("1;@;" + login2 + ";@;" + pass2 + ";@;")) {
-					br.close();
-					return true;
-				}
+			//TODO
+			File songList = new File("SongList.txt");
+			String song = null;
+			FileReader songReader = new FileReader(songList);
+			BufferedReader songStream = new BufferedReader(songReader);
+			while ((song = songStream.readLine()) != null) {
+				System.out.println(song);
+				listSong.add(song);
 			}
-			br.close();
-		} catch (FileNotFoundException e) {
-			System.err.println("L'annuaire n'existe pas !");
-		} catch (IOException e) {
-			e.printStackTrace();
+			//TODO
 		}
-		return false;
-	}
+		catch (Exception uin) {uin.printStackTrace();}
 
-	// Check if the login already exists
-	private boolean loginExists(String msg) {
 		try {
-			File dir = new File("directory.txt");
-			BufferedReader br = new BufferedReader(new FileReader(dir));
-			String line = "";
-
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("1;@;" + msg + ";@;")) {
-					br.close();
-					return true;
-				}
+			SSLServerSocketFactory ssocketFactory = (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
+			SSLServerSocket serverSock = (SSLServerSocket) ssocketFactory.createServerSocket(5001);
+			final String[] enabledCipherSuites = { "SSL_DH_anon_WITH_RC4_128_MD5" };
+			serverSock.setEnabledCipherSuites(enabledCipherSuites);
+			while (true) {
+				SSLSocket fileSocket = (SSLSocket) serverSock.accept();
+				PrintWriter writer = new PrintWriter(fileSocket.getOutputStream());
+				Thread t = new Thread(new ClientHandler(fileSocket, writer));
+				t.start();
 			}
-			br.close();
-		} catch (IOException e) {
-			e.printStackTrace();
 		}
-		return false;
+		catch (Exception ef) {
+			ef.printStackTrace();
+		}
 	}
 
-	// Create a new account
-	private void createNewAccount(String login, String pass, String fullName, String mail) throws IOException {
-		String s = "1;@;" + login + ";@;" + pass + ";@;" + fullName + ";@;" + mail + ";@;\n";
-		byte data[] = s.getBytes();
-		Path p = Paths.get("directory.txt");
-		Files.write(p, data, StandardOpenOption.APPEND);
+	private void sendUser(String message, ArrayList array) {
+		Iterator it = array.iterator();
+		try {
+			PrintWriter writer = (PrintWriter) it.next();
+			writer.println(message);
+			writer.flush();
+		}
+		catch (Exception exaf) {
+			exaf.printStackTrace();
+		}
 	}
 
-	// Read write not completed
-	@Override
-	public void failed(Throwable e, ClientConnectionInformation attach) {
-		e.printStackTrace();
-	}
 }
