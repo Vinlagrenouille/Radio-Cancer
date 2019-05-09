@@ -11,6 +11,9 @@ import javax.sound.sampled.*;
 import java.util.jar.*;
 import javax.net.ssl.*;
 
+//Pour envoi/réception paquet, regarder MTU !!! Permet de créer des paquets de plusieurs bytes.
+//Pour l'asynchrone, regarder AIO files !!!
+
 public class RadioClient extends JFrame {
 	Clip clip1;
 	SSLSocket sock;
@@ -28,6 +31,7 @@ public class RadioClient extends JFrame {
 			boolean done = true;
 			boolean started = false;
 			StringBuilder tryMe = new StringBuilder("");
+			AudioInputStream sound;
 			try {
 				while((message = reader.readLine()) != null) {
 					if (message.startsWith("DONE")) {
@@ -35,16 +39,32 @@ public class RadioClient extends JFrame {
 						byte[] newSounds = stringToConvertToBytes.getBytes();
 						started = false;
 						done = true;
-						System.out.println("Done Receiving, playing...");
 						playSound(newSounds);
 
 					}
 					else if(message.startsWith("STREAM")) {
-						tryMe.delete(0, tryMe.length());
+						message = message.replaceFirst("STREAM", "");
+						byte byteToPlay = message.getBytes();
+						InputStream listen = new ByteArrayInputStream(songsToPlay);
+						AudioInputStream sound = AudioSystem.getAudioInputStream(listen);
+						// load the sound into memory (a Clip)
+						DataLine.Info info = new DataLine.Info(Clip.class, sound.getFormat());
+						clip1 = (Clip) AudioSystem.getLine(info);
+						clip1.open(sound);
+						clip1.addLineListener(new LineListener() {
+							public void update(LineEvent event) {
+								if (event.getType() == LineEvent.Type.STOP) {
+									event.getLine().close();
+								}
+							}
+						});
+						// play the sound clip
+						clip1.start();
+						/*tryMe.delete(0, tryMe.length());
 						started = true;
 						done = false;
 						message = message.replaceFirst("STREAM", "");
-						tryMe.append(message);
+						tryMe.append(message);*/
 					}
 					else if (started && !done) {
 						tryMe.append(message);

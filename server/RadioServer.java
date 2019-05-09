@@ -50,6 +50,7 @@ public class RadioServer {
 						File file = new File(message);
 						InputStream fileStream = new FileInputStream(file);
 						System.out.println("CHOOSE : " + message);
+						
 						long length = file.length();
 						if (length > Integer.MAX_VALUE) {
 							System.out.println("TOO LARGE - ERROR");
@@ -64,9 +65,11 @@ public class RadioServer {
 							throw new IOException("FAILED READING "+ file.getName());
 						}
 						fileStream.close();
-						String value = new String(bytes);
-						sendUser("STREAM", userList);
-						sendUser(value, userList);
+						
+						for(int i = 0; i < bytes.length; i++) {
+							sendUser("STREAM"+bytes[i], userList);
+						}
+						
 						sendUser("DONE", userList);
 					}
 				}
