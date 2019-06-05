@@ -1,46 +1,57 @@
+package client;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.concurrent.Future;
 
+import serveur.Radio;
+
 public class AIO_ClntSckt {
-  public static void main(String[] args) throws Exception {
-    AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
-    SocketAddress serverAddr = new InetSocketAddress("localhost", 8989);
-    Future<Void> result = channel.connect(serverAddr);
-    result.get();
-    
-    System.out.println("Connecte");
-    
-    Attachment attach = new Attachment();
-    attach.channel = channel;
-    attach.buffer = ByteBuffer.allocate(2048);
-    attach.isRead = false;
-    attach.mainThread = Thread.currentThread();
 
-    Charset cs = Charset.forName("UTF-8");
-    String msg = "Bonjour";
-    byte[] data = msg.getBytes(cs);
-    attach.buffer.put(data);
-    attach.buffer.flip();
+	private ArrayList<String> globalListSong = new ArrayList<String>();
+	private ArrayList<Radio> listRadio = new ArrayList<>();
+	private ArrayList<PrintWriter> userList;
 
-    ReadWriteHandler readWriteHandler = new ReadWriteHandler();
-    channel.write(attach.buffer, attach, readWriteHandler);
-    attach.mainThread.join();
-  }
+	public static void main(String[] args) throws Exception {
+		AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
+		SocketAddress serverAddr = new InetSocketAddress("localhost", 8989);
+		Future<Void> result = channel.connect(serverAddr);
+		result.get();
+
+		System.out.println("Connecte");
+
+		Attachment attach = new Attachment();
+		attach.channel = channel;
+		attach.buffer = ByteBuffer.allocate(2048);
+		attach.isRead = false;
+		attach.mainThread = Thread.currentThread();
+
+		Charset cs = Charset.forName("UTF-8");
+		String msg = "Bonjour";
+		byte[] data = msg.getBytes(cs);
+		attach.buffer.put(data);
+		attach.buffer.flip();
+
+		//ReadWriteHandler readWriteHandler = new ReadWriteHandler();
+		//channel.write(attach.buffer, attach, readWriteHandler);
+		attach.mainThread.join();
+	}
 }
 class Attachment {
-  AsynchronousSocketChannel channel;
-  ByteBuffer buffer;
-  Thread mainThread;
-  boolean isRead;
+	AsynchronousSocketChannel channel;
+	ByteBuffer buffer;
+	Thread mainThread;
+	boolean isRead;
 }
-class ReadWriteHandler implements CompletionHandler<Integer, Attachment> {
+/*class ReadWriteHandler implements CompletionHandler<Integer, Attachment> {
   @Override
   public void completed(Integer result, Attachment attach) {
     if (attach.isRead) {
@@ -84,3 +95,4 @@ class ReadWriteHandler implements CompletionHandler<Integer, Attachment> {
     return msg;
   }
 }
+ */

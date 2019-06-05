@@ -1,3 +1,5 @@
+package serveur;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -93,7 +95,7 @@ public class NetIfInfo
         }
     }
 
-    private static InterfaceInfo getInterfaceInfo(NetworkInterface nif) throws IOException
+    public static InterfaceInfo getInterfaceInfo(NetworkInterface nif) throws IOException
     {
         // get interface information
         InterfaceInfo info = new InterfaceInfo();
@@ -157,7 +159,10 @@ public class NetIfInfo
         while (interfaces.hasMoreElements())
         {
             NetworkInterface nif = interfaces.nextElement();
-            System.out.println(getInterfaceInfo(nif));
         }
+    }
+    
+    public Enumeration<NetworkInterface> getNetworkInterface() throws SocketException{
+    	return NetworkInterface.getNetworkInterfaces();
     }
 }
