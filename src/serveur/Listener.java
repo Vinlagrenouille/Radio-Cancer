@@ -16,6 +16,7 @@ public class Listener {
 	}
 
 	public void sendUser(String message) {
+		System.out.println("Sent");
 		pw.println(message);
 		pw.flush();
 	}

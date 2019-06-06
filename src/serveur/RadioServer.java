@@ -2,6 +2,7 @@ package serveur;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
 
@@ -12,20 +13,27 @@ import javax.net.ssl.SSLSocket;
 public class RadioServer {
 	private ArrayList<String> globalListSong = new ArrayList<String>();
 	private ArrayList<Radio> listRadio = new ArrayList<>();
-	private ArrayList<ClientHandler> listeners;
+	private ArrayList<ClientHandler> listeners = new ArrayList<>();
 
+	//The constructor gets the radios and the songs, to list them 
 	public RadioServer() {
-		File folder = new File("your/path");
+		System.out.println("Working Directory = " +
+				System.getProperty("user.dir"));
+		File folder = new File(System.getProperty("user.dir")+"\\Musique");
 		File[] listOfFiles = folder.listFiles();
-		
+		System.out.println(listOfFiles.length);
+
 		for (int i = 0; i < listOfFiles.length; i++) {
 			if(listOfFiles[i].isDirectory()) {
-				File listSongF = new File("your/path/"+listOfFiles[i].getName());
+				File listSongF = new File(System.getProperty("user.dir")+"\\Musique\\"+listOfFiles[i].getName());
 				File[] listSongRadio = listSongF.listFiles();
 				ArrayList<String> list = new ArrayList<>();
-				for(int j = 0; j < listOfFiles[i].length(); j++) {
+
+				for(int j = 0; j < listSongRadio.length; j++) {
+
 					list.add(listSongRadio[j].getName());
-					globalListSong.add(listOfFiles[i].getName());
+					globalListSong.add(listSongRadio[j].toString());
+					System.out.println(listSongRadio[j].toString());
 				}
 				Radio r = new Radio(listOfFiles[i].getName(), list);
 				listRadio.add(r);
@@ -35,12 +43,13 @@ public class RadioServer {
 	}
 
 	private void go() {
+		System.out.println("Server online");
 		boolean flag = true;
 		try {
 			SSLServerSocketFactory ssocketFactory = (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
 			SSLServerSocket serverSock = (SSLServerSocket) ssocketFactory.createServerSocket(5001);
-			final String[] enabledCipherSuites = { "SSL_DH_anon_WITH_RC4_128_MD5" };
-			serverSock.setEnabledCipherSuites(enabledCipherSuites);
+			//final String[] enabledCipherSuites = { "TLS_RSA_WITH_AES_128_CBC_SHA" };
+			//serverSock.setEnabledCipherSuites(enabledCipherSuites);
 
 			while (flag) {
 				SSLSocket fileSocket = (SSLSocket) serverSock.accept();
@@ -57,16 +66,13 @@ public class RadioServer {
 		Listener l;
 		BufferedReader reader;
 		SSLSocket sock;
-		public ClientHandler(SSLSocket clientSocket) {
+		public ClientHandler(SSLSocket clientSocket) throws IOException {
 			sock = clientSocket;
-			try {
-				InputStreamReader isReader = new InputStreamReader(sock.getInputStream());
-				reader = new BufferedReader(isReader);
-				l = new Listener(sock);
-			}
-			catch(Exception e) {e.printStackTrace();}
+			InputStreamReader isReader = new InputStreamReader(sock.getInputStream());
+			reader = new BufferedReader(isReader);
 			for (Radio x : listRadio) {
-				l.sendUser(x.toString());
+				System.out.println(x.getName());
+				l.sendUser(x.getName());
 			}
 			l.sendUser("STOP");
 			l.sendUser("Please choose a radio by typing: 'CHOOSE <name_of_the_radio>'");
@@ -122,5 +128,8 @@ public class RadioServer {
 			}
 			catch (Exception e) {e.printStackTrace();}
 		}
+	}
+	public static void main(String[] args) {
+		new RadioServer();
 	}
 }

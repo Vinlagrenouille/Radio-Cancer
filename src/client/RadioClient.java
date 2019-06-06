@@ -33,6 +33,7 @@ public class RadioClient extends JFrame {
 			AudioInputStream sound;
 			try {
 				while((message = reader.readLine()) != null) {
+					System.out.println("Loop");
 					if (message.startsWith("DONE")) {
 
 					}
@@ -73,8 +74,8 @@ public class RadioClient extends JFrame {
 		try {
 			SSLSocketFactory sslsocketfactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
 			sock = (SSLSocket) sslsocketfactory.createSocket("localhost", 5001);
-			final String[] enabledCipherSuites = { "SSL_DH_anon_WITH_RC4_128_MD5" };
-			sock.setEnabledCipherSuites(enabledCipherSuites);
+			//final String[] enabledCipherSuites = { "TLS_RSA_WITH_AES_128_CBC_SHA" };
+			//sock.setEnabledCipherSuites(enabledCipherSuites);
 			InputStreamReader streamReader = new InputStreamReader(sock.getInputStream());
 			Thread readerThread = new Thread(new IncomingReader());
 			readerThread.start();
@@ -91,6 +92,10 @@ public class RadioClient extends JFrame {
 		catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	public static void main(String[] args) {
+		new RadioClient();
 	}
 
 }
