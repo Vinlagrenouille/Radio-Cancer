@@ -2,7 +2,6 @@ package serveur;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.NetworkInterface;
 import java.util.ArrayList;
@@ -13,6 +12,7 @@ public class Radio implements Runnable {
 	private String name;
 	private ArrayList<String> listSong = new ArrayList<>();
 	private ArrayList<Listener> listeners = new ArrayList<>();
+	private boolean running = false;
 
 	public Radio(String n, ArrayList<String> list) {
 		Objects.requireNonNull(n);
@@ -45,6 +45,7 @@ public class Radio implements Runnable {
 					MTU = 100;
 				}
 			}
+			running = true;
 			for(String s : listSong) {
 				System.out.println("Playing "+s);
 				File file = new File(System.getProperty("user.dir")+"\\Musique\\"+name+"\\"+s);
@@ -55,14 +56,11 @@ public class Radio implements Runnable {
 					System.out.println("TOO LARGE - ERROR");
 				}
 
-				byte[] pack = new byte[MTU+1];
+				byte[] pack = new byte[MTU];
 				int offset = 0;
 				int numRead = 0;
 				while (offset < pack.length && (numRead=fileStream.read(pack, offset, pack.length-offset)) >= 0) {
 					offset += numRead;
-				}
-				if (offset < pack.length) {
-					throw new IOException("Could not completely read file "+ file.getName());
 				}
 				String value = new String(pack);
 				/*for(int i=0; i<length; i+=MTU) {
@@ -79,8 +77,12 @@ public class Radio implements Runnable {
 				sendUsers("STREAM"+value);
 				fileStream.close();
 				sendUsers("DONE");
+				fileStream.close();
 			}
 			System.out.println("End of the radio");
+			running = false;
+			sendUsers("CHOOSE");
+			listeners = new ArrayList<>();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -92,7 +94,9 @@ public class Radio implements Runnable {
 		}
 	}
 
-
+	public boolean isRunning() {
+		return running;
+	}
 
 	public String getName() {
 		return name;

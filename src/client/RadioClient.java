@@ -2,20 +2,12 @@ package client;
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import javax.net.*;
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
-import javax.swing.event.*;
-import javax.swing.text.*;
 
 import sun.audio.AudioData;
 import sun.audio.AudioDataStream;
 import sun.audio.AudioPlayer;
 
 import javax.sound.sampled.*;
-import java.util.jar.*;
-import javax.net.ssl.*;
 
 
 public class RadioClient {
@@ -40,7 +32,6 @@ public class RadioClient {
 						System.out.println(message);
 						Scanner scan = new Scanner(System.in);
 						String choice = scan.nextLine();
-						scan.close();
 						writer.println(choice);
 						writer.flush();
 					}
@@ -48,7 +39,7 @@ public class RadioClient {
 						System.out.println("Streaming..");
 						message = message.replaceFirst("STREAM", "");
 						byte[] byteToPlay = message.getBytes();
-						InputStream listen = new ByteArrayInputStream(byteToPlay);
+						//InputStream listen = new ByteArrayInputStream(byteToPlay);
 						AudioData audiodata = new AudioData(byteToPlay);
 						// Create an AudioDataStream to play back
 						AudioDataStream audioStream = new AudioDataStream(audiodata);

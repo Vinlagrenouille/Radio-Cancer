@@ -8,10 +8,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
 
-import javax.net.ssl.SSLServerSocket;
-import javax.net.ssl.SSLServerSocketFactory;
-import javax.net.ssl.SSLSocket;
-
 public class RadioServer {
 	private ArrayList<String> globalListSong = new ArrayList<String>();
 	private ArrayList<Radio> listRadio = new ArrayList<>();
@@ -49,9 +45,7 @@ public class RadioServer {
 	private void go() {
 		System.out.println("Server online");
 		boolean flag = true;
-		try {
-			ServerSocket serverSock = new ServerSocket(5001);
-
+		try(ServerSocket serverSock = new ServerSocket(5001)) {
 			while (flag) {
 				Socket fileSocket = serverSock.accept();
 				ClientHandler c = new ClientHandler(fileSocket);
@@ -98,7 +92,6 @@ public class RadioServer {
 						if(message.startsWith("NEW ")) {
 							message = message.replaceFirst("NEW ", "");
 							Radio r = new Radio(message, new ArrayList<>());
-							//TODO get list of musics
 							listRadio.add(r);
 							for(Radio tmp : listRadio) {
 								tmp.removeListener(l);
@@ -118,7 +111,9 @@ public class RadioServer {
 								System.out.println(r.getName());
 								if(message.startsWith(r.getName())) {
 									r.addListener(l);
-									r.run();
+									if(!r.isRunning()) {
+										r.run();
+									}
 								}
 							}
 						}
