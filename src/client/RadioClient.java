@@ -8,20 +8,21 @@ import java.awt.*;
 import java.awt.event.*;
 import javax.swing.event.*;
 import javax.swing.text.*;
+
+import sun.audio.AudioData;
+import sun.audio.AudioDataStream;
+import sun.audio.AudioPlayer;
+
 import javax.sound.sampled.*;
 import java.util.jar.*;
 import javax.net.ssl.*;
 
 
-public class RadioClient extends JFrame {
+public class RadioClient {
 	Clip clip1;
-	SSLSocket sock;
-	SSLSocket sock_2;
-	DefaultListModel list = new DefaultListModel();
+	Socket sock;
 	BufferedReader reader;
 	PrintWriter writer;
-	//BufferedReader reader_2;
-	//PrintWriter writer_2;
 
 	public RadioClient() {
 		connectTo();
@@ -30,18 +31,30 @@ public class RadioClient extends JFrame {
 	private class IncomingReader implements Runnable {
 		public void run() {
 			String message = null;
-			AudioInputStream sound;
 			try {
 				while((message = reader.readLine()) != null) {
-					System.out.println("Loop");
 					if (message.startsWith("DONE")) {
 
 					}
+					else if(message.startsWith("CHOOSE")) {
+						System.out.println(message);
+						Scanner scan = new Scanner(System.in);
+						String choice = scan.nextLine();
+						scan.close();
+						writer.println(choice);
+						writer.flush();
+					}
 					else if(message.startsWith("STREAM")) {
+						System.out.println("Streaming..");
 						message = message.replaceFirst("STREAM", "");
 						byte[] byteToPlay = message.getBytes();
 						InputStream listen = new ByteArrayInputStream(byteToPlay);
-						sound = AudioSystem.getAudioInputStream(listen);
+						AudioData audiodata = new AudioData(byteToPlay);
+						// Create an AudioDataStream to play back
+						AudioDataStream audioStream = new AudioDataStream(audiodata);
+						// Play the sound
+						AudioPlayer.player.start(audioStream);
+						/*sound = AudioSystem.getAudioInputStream(listen);
 						// load the sound into memory (a Clip)
 						DataLine.Info info = new DataLine.Info(Clip.class, sound.getFormat());
 						clip1 = (Clip) AudioSystem.getLine(info);
@@ -54,15 +67,12 @@ public class RadioClient extends JFrame {
 							}
 						});
 						// play the sound clip
-						clip1.start();
+						clip1.start();*/
 					}
-					else if((!message.equals("STOP"))) {
-						list.insertElementAt(message, 0);
-						validate();
-						while (list.getSize() == 0) {
-							writer.println("LIST");
-							writer.flush();
-						}
+					else if(message.startsWith("INFO")) {
+						System.out.println(message);
+					}
+					else {
 					}
 				}
 			}
@@ -72,22 +82,14 @@ public class RadioClient extends JFrame {
 	
 	private void connectTo() {
 		try {
-			SSLSocketFactory sslsocketfactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-			sock = (SSLSocket) sslsocketfactory.createSocket("localhost", 5001);
-			//final String[] enabledCipherSuites = { "TLS_RSA_WITH_AES_128_CBC_SHA" };
-			//sock.setEnabledCipherSuites(enabledCipherSuites);
+			sock = new Socket("localhost", 5001);
+			
 			InputStreamReader streamReader = new InputStreamReader(sock.getInputStream());
 			Thread readerThread = new Thread(new IncomingReader());
 			readerThread.start();
 			reader = new BufferedReader(streamReader);
 			writer = new PrintWriter(sock.getOutputStream());
-			writer.println("CHOOSE");
-			writer.flush();
-			Thread.sleep(3000);
-			while (list.getSize() == 0) {
-				writer.println("CHOOSE");
-				writer.flush();
-			}
+			
 		}
 		catch (Exception e) {
 			e.printStackTrace();

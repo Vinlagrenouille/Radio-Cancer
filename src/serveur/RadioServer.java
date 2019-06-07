@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.*;
 
 import javax.net.ssl.SSLServerSocket;
@@ -37,6 +39,8 @@ public class RadioServer {
 				}
 				Radio r = new Radio(listOfFiles[i].getName(), list);
 				listRadio.add(r);
+				Thread t = new Thread(r);
+				t.start();
 			}
 		}
 		go();
@@ -46,14 +50,13 @@ public class RadioServer {
 		System.out.println("Server online");
 		boolean flag = true;
 		try {
-			SSLServerSocketFactory ssocketFactory = (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
-			SSLServerSocket serverSock = (SSLServerSocket) ssocketFactory.createServerSocket(5001);
-			//final String[] enabledCipherSuites = { "TLS_RSA_WITH_AES_128_CBC_SHA" };
-			//serverSock.setEnabledCipherSuites(enabledCipherSuites);
+			ServerSocket serverSock = new ServerSocket(5001);
 
 			while (flag) {
-				SSLSocket fileSocket = (SSLSocket) serverSock.accept();
+				Socket fileSocket = serverSock.accept();
 				ClientHandler c = new ClientHandler(fileSocket);
+				Thread t = new Thread(c);
+				t.start();
 				listeners.add(c);
 			}
 		}
@@ -65,21 +68,24 @@ public class RadioServer {
 	private class ClientHandler implements Runnable {
 		Listener l;
 		BufferedReader reader;
-		SSLSocket sock;
-		public ClientHandler(SSLSocket clientSocket) throws IOException {
+		Socket sock;
+		public ClientHandler(Socket clientSocket) throws IOException {
 			sock = clientSocket;
 			InputStreamReader isReader = new InputStreamReader(sock.getInputStream());
 			reader = new BufferedReader(isReader);
+			
+			l = new Listener(clientSocket);
+			
 			for (Radio x : listRadio) {
-				System.out.println(x.getName());
 				l.sendUser(x.getName());
 			}
-			l.sendUser("STOP");
-			l.sendUser("Please choose a radio by typing: 'CHOOSE <name_of_the_radio>'");
-			l.sendUser("To create a new Radio: 'NEW <name_of_your_radio> list_of_songs'");
-			l.sendUser("To stop : 'STOP'");
-			l.sendUser("To list radios again: 'LIST'");
-			l.sendUser("To get help: 'HELP'");
+			l.sendUser("INFO");
+			l.sendUser("INFO Please choose a radio by typing: 'CHOOSE <name_of_the_radio>'");
+			l.sendUser("INFO To create a new Radio: 'NEW <name_of_your_radio> list_of_songs'");
+			l.sendUser("INFO To stop : 'STOP'");
+			l.sendUser("INFO To list radios again: 'LIST'");
+			l.sendUser("INFO To get help: 'HELP'");
+			l.sendUser("CHOOSE");
 		}
 
 		public void run() {
@@ -87,6 +93,7 @@ public class RadioServer {
 			boolean flag = true;
 			try {
 				while(flag) {
+					System.out.println("Thinking..");
 					if((message = reader.readLine()) != null) {
 						if(message.startsWith("NEW ")) {
 							message = message.replaceFirst("NEW ", "");
@@ -106,9 +113,12 @@ public class RadioServer {
 						}
 						else if (message.startsWith("CHOOSE ")) {
 							message = message.replaceFirst("CHOOSE ", "");
+							System.out.println("Choosed "+message);
 							for(Radio r : listRadio) {
-								if(r.getName() == message) {
+								System.out.println(r.getName());
+								if(message.startsWith(r.getName())) {
 									r.addListener(l);
+									r.run();
 								}
 							}
 						}
@@ -120,7 +130,6 @@ public class RadioServer {
 							l.sendUser("To get help: 'HELP'");
 						}
 						else if (message.equals("STOP")) {
-							flag = false;
 							sock.close();
 						}
 					}
